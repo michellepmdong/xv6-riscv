@@ -43,6 +43,7 @@ usertrap(void)
 
   // send interrupts and exceptions to kerneltrap(),
   // since we're now in the kernel.
+  /*kernel write addr in reg to where riscv should go for traps*/
   w_stvec((uint64)kernelvec);
 
   struct proc *p = myproc();
@@ -51,10 +52,13 @@ usertrap(void)
   p->trapframe->epc = r_sepc();
   
   if(r_scause() == 8){
-    // system call
+    /* system call was the cause for the intr*/
 
     if(p->killed)
       exit(-1);
+
+    // if(p->suspended)
+    //   exit(-1);
 
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
@@ -66,7 +70,7 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
-    // ok
+    /*ok, don't do anything*/
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -75,6 +79,9 @@ usertrap(void)
 
   if(p->killed)
     exit(-1);
+
+  // if(p->suspended)
+  //   exit(-1);
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)

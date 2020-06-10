@@ -36,3 +36,7 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+entry("strace");
+entry("psinfo");
+entry("suspend");
+entry("resume");

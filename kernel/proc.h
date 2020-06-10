@@ -1,4 +1,6 @@
 // Saved registers for kernel context switches.
+#define SUS_MAGIC 0xDEADBEEF
+
 struct context {
   uint64 ra;
   uint64 sp;
@@ -47,7 +49,7 @@ struct trapframe {
   /*  16 */ uint64 kernel_trap;   // usertrap()
   /*  24 */ uint64 epc;           // saved user program counter
   /*  32 */ uint64 kernel_hartid; // saved kernel tp
-  /*  40 */ uint64 ra;
+  /*  40 */ uint64 ra;            // return addr...like lr
   /*  48 */ uint64 sp;
   /*  56 */ uint64 gp;
   /*  64 */ uint64 tp;
@@ -80,16 +82,20 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE, SUSPENDED };
 
 // Per-process state
 struct proc {
+
   struct spinlock lock;
 
   // p->lock must be held when using these:
+  int tracing; //TODO: lock or no lock?????
+
   enum procstate state;        // Process state
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
+  // int suspended;               // If non-zero, have been suspended
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
 
@@ -105,4 +111,17 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+};
+
+struct hdr {
+  uint64 sz;
+  uint64 code_data_sz;
+  uint64 stack_sz;
+  char name[16];
+  uint magic;
+  // uint64 ra;
+  // uint64 epc;
+  // uint64 sp;
+  int tracing;
+  struct trapframe *tf;
 };

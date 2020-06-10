@@ -160,6 +160,7 @@ w_mideleg(uint64 x)
 
 // Supervisor Trap-Vector Base Address
 // low two bits are mode.
+/* write trap handler, and pc will be replaced with stvec*/
 static inline void 
 w_stvec(uint64 x)
 {
@@ -289,6 +290,7 @@ r_sp()
 
 // read and write tp, the thread pointer, which holds
 // this core's hartid (core number), the index into cpus[].
+/* When hardware boots/startup, assembly mv an id number for each cpu, a thread ptr contains the id. Id later used as index in cpu array */
 static inline uint64
 r_tp()
 {

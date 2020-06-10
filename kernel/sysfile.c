@@ -53,6 +53,37 @@ fdalloc(struct file *f)
 }
 
 uint64
+sys_suspend(void)
+{
+  int fd, pid;
+  struct file *f;
+  int argint_rv, argfd_rv;
+
+  argint_rv = argint(1, &pid);
+  argfd_rv = argfd(0, &fd, &f);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_suspend(%d, %d)\n", myproc()->pid, fd, pid);
+  }
+
+  if(argint_rv < 0 || argfd_rv < 0)
+    return -1;
+
+  return ksuspend(pid, f);
+
+}
+
+uint64
+sys_resume(void)
+{
+  char path[MAXPATH];
+
+  argstr(0, path, MAXPATH);
+  printf("filename to resume: %s\n", path);
+  return resume(path);
+}
+
+uint64
 sys_dup(void)
 {
   struct file *f;
@@ -62,6 +93,9 @@ sys_dup(void)
     return -1;
   if((fd=fdalloc(f)) < 0)
     return -1;
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_dup(%d)\n", myproc()->pid, fd);
+  }
   filedup(f);
   return fd;
 }
@@ -72,10 +106,47 @@ sys_read(void)
   struct file *f;
   int n;
   uint64 p;
+  int argfd_rv;
+  int argint_rv;
+  int argaddr_rv;
+  int fd;
 
-  if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
+  argfd_rv = argfd(0, &fd, &f);
+  argint_rv = argint(2, &n);
+  argaddr_rv = argaddr(1, &p);
+
+  // if((fd=fdalloc(f)) < 0)
+  //   return -1;
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_read(%d, %p, %d)\n", myproc()->pid, fd, (void*) p, n);
+  }
+
+  if(argfd_rv < 0 || argint_rv < 0 || argaddr_rv < 0)
     return -1;
   return fileread(f, p, n);
+}
+
+void cputc_encoded(char c)
+{
+  char buf[2];
+
+  if (c == '\n') {
+    printf("\\n");
+  } else {
+    buf[0] = c;
+    buf[1] = '\0';
+    printf("%s", buf);
+  }
+}
+
+void cprintfn(char *s, int n)
+{
+  int i;
+
+  for (i = 0; i < n; i++) {
+    cputc_encoded(s[i]);
+  }
 }
 
 uint64
@@ -84,8 +155,24 @@ sys_write(void)
   struct file *f;
   int n;
   uint64 p;
+  int argfd_rv;
+  int argint_rv;
+  int argaddr_rv;
+  int fd;
 
-  if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
+  argfd_rv = argfd(0, &fd, &f);
+  argint_rv = argint(2, &n);
+  argaddr_rv = argaddr(1, &p);
+  char str[n];
+  fetchstr(p, str, n);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_write(%d, ", myproc()->pid, fd);
+    cprintfn(str, n);
+    printf(", %d)\n", n);
+  }
+
+  if(argfd_rv < 0 || argint_rv < 0 || argaddr_rv < 0)
     return -1;
 
   return filewrite(f, p, n);
@@ -96,21 +183,39 @@ sys_close(void)
 {
   int fd;
   struct file *f;
+  int rv;
 
-  if(argfd(0, &fd, &f) < 0)
+  rv = argfd(0, &fd, &f);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_close(%d)\n", myproc()->pid, fd);
+  }
+
+  if(rv < 0)
     return -1;
   myproc()->ofile[fd] = 0;
   fileclose(f);
   return 0;
 }
 
+//int fstat(int fd, struct stat*);
 uint64
 sys_fstat(void)
 {
   struct file *f;
   uint64 st; // user pointer to struct stat
+  int argfd_rv;
+  int argaddr_rv;
+  int fd;
 
-  if(argfd(0, 0, &f) < 0 || argaddr(1, &st) < 0)
+  argfd_rv = argfd(0, &fd, &f);
+  argaddr_rv = argaddr(1, &st);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_fstat(%d)\n", myproc()->pid, fd);
+  }
+
+  if(argfd_rv < 0 || argaddr_rv < 0)
     return -1;
   return filestat(f, st);
 }
@@ -121,8 +226,12 @@ sys_link(void)
 {
   char name[DIRSIZ], new[MAXPATH], old[MAXPATH];
   struct inode *dp, *ip;
+  int argstr_old, argstr_new;
 
-  if(argstr(0, old, MAXPATH) < 0 || argstr(1, new, MAXPATH) < 0)
+  argstr_old = argstr(0, old, MAXPATH);
+  argstr_new = argstr(1, new, MAXPATH);
+
+  if(argstr_old < 0 || argstr_new < 0)
     return -1;
 
   begin_op();
@@ -132,6 +241,11 @@ sys_link(void)
   }
 
   ilock(ip);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_link(%s, %s)\n", myproc()->pid, old, new);
+  }
+
   if(ip->type == T_DIR){
     iunlockput(ip);
     end_op();
@@ -188,8 +302,15 @@ sys_unlink(void)
   struct dirent de;
   char name[DIRSIZ], path[MAXPATH];
   uint off;
+  int rv;
 
-  if(argstr(0, path, MAXPATH) < 0)
+  rv = argstr(0, path, MAXPATH);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_unlink(%s)\n", myproc()->pid, path);
+  }
+
+  if(rv < 0)
     return -1;
 
   begin_op();
@@ -291,8 +412,17 @@ sys_open(void)
   struct file *f;
   struct inode *ip;
   int n;
+  int argstr_rv;
+  int argint_rv;
 
-  if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
+  argstr_rv = argstr(0, path, MAXPATH);
+  argint_rv = argint(1, &omode);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_open(%s, %d)\n", myproc()->pid, path, omode);
+  }
+
+  if((n = argstr_rv) < 0 || argint_rv < 0)
     return -1;
 
   begin_op();
@@ -356,9 +486,17 @@ sys_mkdir(void)
 {
   char path[MAXPATH];
   struct inode *ip;
+  int rv;
 
   begin_op();
-  if(argstr(0, path, MAXPATH) < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
+
+  rv = argstr(0, path, MAXPATH);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_mkdir(%s)\n", myproc()->pid, path);
+  }
+
+  if(rv < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
     end_op();
     return -1;
   }
@@ -373,11 +511,21 @@ sys_mknod(void)
   struct inode *ip;
   char path[MAXPATH];
   int major, minor;
+  int argstr_rv;
+  int argint_major;
+  int argint_minor;
+
+  argstr_rv = argstr(0, path, MAXPATH);
+  argint_major = argint(1, &major);
+  argint_minor = argint(2, &minor);
 
   begin_op();
-  if((argstr(0, path, MAXPATH)) < 0 ||
-     argint(1, &major) < 0 ||
-     argint(2, &minor) < 0 ||
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_mknod(%s, %d, %d)\n", myproc()->pid, path, major, minor);
+  }
+  if((argstr_rv) < 0 ||
+     argint_major < 0 ||
+     argint_minor < 0 ||
      (ip = create(path, T_DEVICE, major, minor)) == 0){
     end_op();
     return -1;
@@ -392,10 +540,18 @@ sys_chdir(void)
 {
   char path[MAXPATH];
   struct inode *ip;
+  int rv;
   struct proc *p = myproc();
   
   begin_op();
-  if(argstr(0, path, MAXPATH) < 0 || (ip = namei(path)) == 0){
+
+  rv = argstr(0, path, MAXPATH);
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_chdir(%s)\n", myproc()->pid, path);
+  }
+
+  if(rv < 0 || (ip = namei(path)) == 0){
     end_op();
     return -1;
   }
@@ -427,6 +583,7 @@ sys_exec(void)
     if(i >= NELEM(argv)){
       goto bad;
     }
+    //fetch addr of next argv elem
     if(fetchaddr(uargv+sizeof(uint64)*i, (uint64*)&uarg) < 0){
       goto bad;
     }
@@ -434,11 +591,24 @@ sys_exec(void)
       argv[i] = 0;
       break;
     }
+    //kalloc for local argv
     argv[i] = kalloc();
     if(argv[i] == 0)
       goto bad;
+    //read into local argv from argv addr we fetched
     if(fetchstr(uarg, argv[i], PGSIZE) < 0)
       goto bad;
+  }
+
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_exec(%s", myproc()->pid, path);
+    for(i=1;; i++){
+      if(argv[i] == 0){
+        break;
+      }
+      printf(", %s", argv[i]);
+    }
+    printf(")\n");
   }
 
   int ret = exec(path, argv);
@@ -461,8 +631,13 @@ sys_pipe(void)
   struct file *rf, *wf;
   int fd0, fd1;
   struct proc *p = myproc();
+  int rv;
 
-  if(argaddr(0, &fdarray) < 0)
+  rv = argaddr(0, &fdarray);
+  if(myproc()->tracing == 1) {
+    printf("[%d] sys_pipe(%p)\n", myproc()->pid, fdarray);
+  }
+  if(rv < 0)
     return -1;
   if(pipealloc(&rf, &wf) < 0)
     return -1;
@@ -484,3 +659,4 @@ sys_pipe(void)
   }
   return 0;
 }
+

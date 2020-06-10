@@ -9,6 +9,16 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+struct pdata {
+  int pid;
+  int mem;
+  char name[16];
+};
+
+struct ptable {
+  struct pdata procs[64];
+};
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -25,6 +35,9 @@ void            consputc(int);
 // exec.c
 int             exec(char*, char**);
 
+//resume.c
+int             resume(char*);
+
 // file.c
 struct file*    filealloc(void);
 void            fileclose(struct file*);
@@ -33,6 +46,7 @@ void            fileinit(void);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             kfilewrite(struct file*, uint64, int n);
 
 // fs.c
 void            fsinit(int);
@@ -105,7 +119,9 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
-
+int 			psinfo(uint64, uint64);
+int 			suspend_state(int, uint64);
+int 			ksuspend(int, struct file*);
 // swtch.S
 void            swtch(struct context*, struct context*);
 
@@ -164,6 +180,7 @@ void            uvminit(pagetable_t, uchar *, uint);
 uint64          uvmalloc(pagetable_t, uint64, uint64);
 uint64          uvmdealloc(pagetable_t, uint64, uint64);
 int             uvmcopy(pagetable_t, pagetable_t, uint64);
+int             uvmcopy_suspend(pagetable_t, pagetable_t, uint64, uint64);
 void            uvmfree(pagetable_t, uint64);
 void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);

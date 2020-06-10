@@ -25,6 +25,7 @@ OBJS = \
   $K/file.o \
   $K/pipe.o \
   $K/exec.o \
+  $K/resume.o \
   $K/sysfile.o \
   $K/kernelvec.o \
   $K/plic.o \
@@ -32,7 +33,7 @@ OBJS = \
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
-#TOOLPREFIX = 
+TOOLPREFIX = /Users/michelledong/Tools/bin/bin/riscv64-unknown-elf-
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
@@ -132,6 +133,18 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_hello_xv6\
+	$U/_fork\
+	$U/_forkexec\
+	$U/_strace\
+	$U/_sctest\
+	$U/_psinfo\
+	$U/_counter\
+	$U/_fib_iter\
+	$U/_suspend\
+	$U/_resume\
+	$U/_bytes\
+	$U/_vctest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

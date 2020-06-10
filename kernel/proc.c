@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include <stddef.h>
 
 struct cpu cpus[NCPU];
 
@@ -119,6 +120,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->tracing = 0; //TODO
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -267,6 +269,16 @@ growproc(int n)
   return 0;
 }
 
+void cprint_bytes(char *label, char *mem, int n)
+{
+  int i;
+  printf("bytes[%s] = ", label);
+  for (i = 0; i < n; i++) {
+    printf("%x ", mem[i]);
+  }
+  printf("\n");
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
@@ -287,6 +299,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
   np->sz = p->sz;
 
   // copy saved user registers.
@@ -446,7 +459,7 @@ scheduler(void)
     intr_on();
 
     for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
+      acquire(&p->lock); /* we don't want other processes or timer intrs*/
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
@@ -584,7 +597,7 @@ kill(int pid)
     acquire(&p->lock);
     if(p->pid == pid){
       p->killed = 1;
-      if(p->state == SLEEPING){
+      if(p->state == SLEEPING || p->state == SUSPENDED){
         // Wake process from sleep().
         p->state = RUNNABLE;
       }
@@ -594,6 +607,34 @@ kill(int pid)
     release(&p->lock);
   }
   return -1;
+}
+
+int
+psinfo(uint64 pt_p, uint64 ucount)
+{
+  struct proc *np;
+  int count;
+  struct proc *p;
+
+  p = myproc();
+
+  count = 0;
+
+  //TODO: locking with p and np?
+  acquire(&p->lock);
+  for(np = proc; np < &proc[NPROC]; np++){
+    // acquire(&np->lock);
+    if(np->state != UNUSED) {
+      copyout(p->pagetable, pt_p+(sizeof(struct pdata)*(count)), (void*)&(np->pid), sizeof(np->pid));
+      copyout(p->pagetable, pt_p+(sizeof(struct pdata)*(count))+offsetof(struct pdata, mem), (void*)&(np->sz), sizeof(np->sz));
+      copyout(p->pagetable, pt_p+(sizeof(struct pdata)*(count))+offsetof(struct pdata, name), (void*)&(np->name), sizeof(np->name));
+      count++;
+    }
+    // release(&np->lock);
+  }
+  copyout(p->pagetable, ucount, (char*)&count, sizeof(count));
+  release(&p->lock);
+  return 0;
 }
 
 // Copy to either a user address, or kernel address,
@@ -637,7 +678,8 @@ procdump(void)
   [SLEEPING]  "sleep ",
   [RUNNABLE]  "runble",
   [RUNNING]   "run   ",
-  [ZOMBIE]    "zombie"
+  [ZOMBIE]    "zombie",
+  [SUSPENDED] "suspend"
   };
   struct proc *p;
   char *state;
@@ -653,4 +695,80 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+
+}
+
+int ksuspend(int pid, struct file *f)
+{
+  struct proc *p;
+  // struct proc *suspend;
+  struct hdr h;
+
+  // suspend = myproc();  
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      p->state = SUSPENDED;
+      release(&p->lock);
+
+      h.sz = p->sz;
+      h.code_data_sz = p->sz - (2 * PGSIZE);
+      h.stack_sz = PGSIZE;
+      h.tracing = p->tracing;
+      h.magic = 0xDEADBEEF;
+      h.tf = &(*(p->trapframe));
+      strncpy(h.name, p->name, 16);
+
+      pagetable_t tmp = myproc()->pagetable;
+      myproc()->pagetable = p->pagetable;
+
+      kfilewrite(f, (uint64) &h, sizeof(struct hdr));
+      kfilewrite(f, (uint64) &(*(p->trapframe)), sizeof(struct trapframe));
+      filewrite(f, 0, h.code_data_sz);
+      // filewrite(f, h.code_data_sz, PGSIZE);
+      filewrite(f, h.code_data_sz + PGSIZE, PGSIZE);
+
+      myproc()->pagetable = tmp; //switching back to suspend->pgtable causes a load page fault scause?
+      return 0;
+    }
+    release(&p->lock);
+  }
+  return -1;
+}
+
+/*tabled for debugging later:
+how to copy target proc pgtable and append to suspend proc pgtable?
+uvmcopy_suspend is same as uvmcopy just with an offset (old top of suspend)
+looks like I can only do either or uvmalloc or uvmcopy to avoid mapping already valid pages
+am I passing back the address (possibly kernel user stack addr) to the old top of suspend to user correctly?*/
+int suspend_state(int pid, uint64 code_data_sz_p)
+{
+  struct proc *p;
+  struct proc *suspend;
+  uint64 oldsz;
+  uint64 code_data_sz;
+
+  suspend = myproc();  
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      p->state = SUSPENDED;
+
+      code_data_sz = p->sz - (2 * PGSIZE);
+
+      oldsz = suspend->sz;
+      
+      // suspend->sz = uvmalloc(suspend->pagetable, suspend->sz, suspend->sz+h.sz); 
+      uvmcopy_suspend(p->pagetable, suspend->pagetable, code_data_sz, oldsz);
+
+      copyout(suspend->pagetable, code_data_sz_p, (char*)&(code_data_sz), sizeof(uint64));
+      // cprint_bytes("code_data", (char*)oldsz, code_data_sz);
+      release(&p->lock);
+      return oldsz;
+    }
+    release(&p->lock);
+  }
+  return -1;
 }

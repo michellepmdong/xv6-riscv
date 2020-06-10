@@ -11,6 +11,7 @@ void
 main()
 {
   if(cpuid() == 0){
+    /* these commands are in defs.h */
     consoleinit();
     printfinit();
     printf("\n");
@@ -40,6 +41,5 @@ main()
     trapinithart();   // install kernel trap vector
     plicinithart();   // ask PLIC for device interrupts
   }
-
-  scheduler();        
+  scheduler(); 
 }

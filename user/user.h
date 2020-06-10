@@ -1,5 +1,27 @@
 struct stat;
 struct rtcdate;
+struct file;
+struct pdata {
+	int pid;
+	int mem;
+	char name[16];
+};
+struct ptable {
+	struct pdata procs[64];
+};
+
+struct hdr {
+  uint64 sz;
+  uint64 code_data_sz;
+  uint64 stack_sz;
+  char name[16];
+  uint magic;
+  // uint64 ra;
+  // uint64 epc;
+  // uint64 sp;
+  int tracing;
+  struct trapframe *tf;
+};
 
 // system calls
 int fork(void);
@@ -23,6 +45,10 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int strace(void);
+int psinfo(struct pdata*, int*);
+int suspend(int, int);
+int resume(char*);
 
 // ulib.c
 int stat(const char*, struct stat*);

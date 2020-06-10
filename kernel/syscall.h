@@ -20,3 +20,8 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+#define SYS_strace  22
+#define SYS_psinfo  23
+#define SYS_suspend  24
+#define SYS_resume  25
+#define SYS_resume  25

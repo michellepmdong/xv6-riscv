@@ -31,6 +31,8 @@ fetchstr(uint64 addr, char *buf, int max)
   return strlen(buf);
 }
 
+/*Argraw pulls the function args (registers 0-5 in riscv) and puts them on the
+trapframe for the kernel to use later*/
 static uint64
 argraw(int n)
 {
@@ -104,6 +106,10 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
+extern uint64 sys_trace_on(void);
+extern uint64 sys_psinfo(void);
+extern uint64 sys_suspend(void);
+extern uint64 sys_resume(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -127,6 +133,10 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_strace]  sys_trace_on,
+[SYS_psinfo]  sys_psinfo,
+[SYS_suspend]  sys_suspend,
+[SYS_resume]  sys_resume,
 };
 
 void
